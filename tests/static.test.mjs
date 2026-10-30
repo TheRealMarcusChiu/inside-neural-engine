@@ -39,6 +39,29 @@ test('eight sections in order, with real chapter links', () => {
   assert.match(html, /<h1 id="overview-title">Inside the Neural Engine<\/h1>/);
 });
 
+test('hero leads with a short lede, CTA, then the chip; primer is optional and later', () => {
+  const hero = html.match(/<section id="overview"[\s\S]*?<\/section>/)[0];
+  assert.match(hero, /id="explore"[^>]*>Explore how it works</);
+  const lede = hero.match(/<p class="lede">([^<]+)</)[1];
+  assert.ok(lede.split(/\s+/).length <= 25, `lede too long: ${lede}`);
+  const chipAt = hero.indexOf('data-component="cpu"');
+  assert.ok(hero.indexOf('id="explore"') < chipAt, 'CTA before chip');
+  assert.ok(hero.indexOf('<details class="hero-more">') > chipAt, 'primer after chip');
+  assert.match(hero, /<details class="hero-more">[\s\S]*neural-engine-transformers/);
+});
+
+test('Core ML figure labels the app and Core ML, with packet groups and legend', () => {
+  const fig = html.match(/<figure class="plate routes"[\s\S]*?<\/figure>/)[0];
+  assert.match(fig, />Application</);
+  assert.match(fig, />Core ML</);
+  for (const u of ['cpu', 'gpu', 'ane']) assert.match(fig, new RegExp(`data-packets="${u}"`));
+  assert.match(fig, /One possible example, not the runtime's plan/);
+  assert.match(fig, /Permitted route/);
+  assert.match(css, /html\[data-motion="paused"\] \.packets \.pkt \{ animation: none; \}/);
+  assert.match(css, /html\[data-page-hidden="true"\] \*/);
+  assert.match(css, /html\[data-motion="paused"\] \{ scroll-behavior: auto; \}/);
+});
+
 test('global motion toggle starts in the running state', () => {
   const t = tag('id="motion-toggle"');
   assert.match(t, /<button/);

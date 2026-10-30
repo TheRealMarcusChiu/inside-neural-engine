@@ -153,7 +153,10 @@ svg text { font-family: var(--body); fill: var(--text); }
 .hero h1 { font-size: clamp(4rem, 9.6vw, 9.4rem); line-height: .84; letter-spacing: -.012em; margin-bottom: .32em; }
 .lede { font-size: clamp(1.1rem, 1.5vw, 1.3rem); line-height: 1.55; max-width: 34em; }
 .hero-note { color: var(--muted); max-width: 34em; padding-left: 14px; border-left: 2px solid var(--ane); }
-.hero-actions { margin: 28px 0; }
+.hero-actions { margin: 28px 0 0; }
+.hero-more { grid-column: 1 / -1; max-width: var(--measure); border-top: 1px solid var(--hair); padding-top: 6px; }
+.hero-more summary { font-weight: 500; color: var(--text); }
+.hero-more p:first-of-type { margin-top: 8px; }
 
 /* Height-capped so the caption and detail stay in the first screen on laptops. */
 .chip { margin: 0; justify-self: end; width: 100%; max-width: min(720px, max(320px, (100vh - 300px) * 1.0667)); }
@@ -197,10 +200,12 @@ svg text { font-family: var(--body); fill: var(--text); }
 @keyframes trace-short { from { stroke-dashoffset: 166; } to { stroke-dashoffset: 0; } }
 
 html[data-motion="paused"] *, html[data-motion="paused"] *::before, html[data-motion="paused"] *::after,
+html[data-page-hidden="true"] *, html[data-page-hidden="true"] *::before, html[data-page-hidden="true"] *::after,
 .is-offscreen *, .is-offscreen *::before, .is-offscreen *::after {
   animation-play-state: paused !important;
 }
 html[data-motion="paused"] *, html[data-motion="paused"] *::before, html[data-motion="paused"] *::after { transition: none !important; }
+html[data-motion="paused"] { scroll-behavior: auto; }
 @media (prefers-reduced-motion: reduce) {
   html:not([data-motion="running"]) *, html:not([data-motion="running"]) *::before, html:not([data-motion="running"]) *::after {
     animation-play-state: paused !important; transition: none !important;
@@ -313,21 +318,43 @@ html[data-motion="paused"] .job-3 { transform: translateX(490px); }
 }
 .gate path { stroke: var(--silver); stroke-opacity: .6; }
 .gate-label { font-size: 14px; fill: var(--muted); text-anchor: middle; }
-.route { stroke-width: 3; stroke: var(--silver); stroke-dasharray: 8 8; animation: flow-route 1.4s linear infinite; }
+@keyframes flow-route { to { stroke-dashoffset: -16; } }
+/* Permitted routes are thin and still; only the example carries moving packets. */
+.route { stroke-width: 1.5; stroke: var(--silver); stroke-opacity: .7; }
 .route[data-route="cpu"] { stroke: var(--cpu); }
 .route[data-route="gpu"] { stroke: var(--gpu); }
 .route[data-route="ane"] { stroke: var(--ane); }
-@keyframes flow-route { to { stroke-dashoffset: -16; } }
-.route.is-blocked { stroke: #5a5f67; stroke-width: 1.5; stroke-dasharray: 2 6; animation: none; }
+.route.is-example { stroke-width: 3.5; stroke-opacity: 1; }
+.route.is-blocked { stroke: #5a5f67; stroke-width: 1.5; stroke-dasharray: 2 6; }
+.app-node rect { fill: var(--charcoal); stroke: var(--hair-strong); }
+.app-node path { stroke: var(--silver); }
+.node-sub { font-size: 14px; fill: var(--muted); }
+.packets { display: none; }
+.packets.has-packets { display: inline; }
+.ex-track { stroke: var(--hair-strong); }
+.pkt { stroke-width: 1.5; }
+.pkt-supported { fill: var(--silver); stroke: var(--silver); }
+.pkt-unsupported { fill: var(--plate); stroke: var(--silver); stroke-dasharray: 3 2; }
+.packets .pkt { transform: translateX(calc(var(--i) * 22px + 6px)); animation: packet 3.2s linear infinite; animation-delay: calc(var(--i) * -3.2s / var(--n, 2)); }
+@keyframes packet {
+  0% { transform: translateX(0); opacity: 0; }
+  8%, 88% { opacity: 1; }
+  100% { transform: translateX(82px); opacity: 0; }
+}
+/* Paused or reduced motion: packets rest in place, fully visible. */
+html[data-motion="paused"] .packets .pkt { animation: none; }
+@media (prefers-reduced-motion: reduce) { html:not([data-motion="running"]) .packets .pkt { animation: none; } }
+.key-line { fill: none; }
+.key-example { stroke: var(--silver); stroke-width: 3.5; }
+.key-permitted { stroke: var(--silver); stroke-width: 1.5; }
+.key-blocked { stroke: #8a9099; stroke-width: 1.5; stroke-dasharray: 2 4; }
+.routes-legend svg { width: 28px; }
 .unit[data-unit="cpu"] rect { stroke: var(--cpu); }
 .unit[data-unit="gpu"] rect { stroke: var(--gpu); }
 .unit[data-unit="ane"] rect { stroke: var(--ane); }
 .unit.is-blocked rect { stroke: #4a4f57; stroke-dasharray: 4 4; fill: transparent; }
 .unit.is-blocked .node-name { fill: var(--muted); text-decoration: line-through; }
 .unit-state { font-size: 15px; fill: #cfd3d9; }
-.routes .key { display: inline-block; width: 14px; height: 10px; margin: 0 4px 0 10px; vertical-align: 0; }
-.key-solid { background: var(--silver); opacity: .6; }
-.key-hollow { border: 1px dashed var(--silver); }
 
 /* Memory ------------------------------------------------------------- */
 .mem .mode { transition: opacity .35s ease; }
@@ -452,6 +479,11 @@ details p { margin: 0 0 6px; }
   .motion-status { display: none; }
   #motion-toggle { padding: 0 12px; font-size: .875rem; }
   main > section { padding-left: 16px; padding-right: 16px; }
+  /* Phone hero: short copy, then the interactive chip within the first screen. */
+  .hero { gap: 18px; padding-top: 20px !important; }
+  .hero h1 { font-size: clamp(3rem, 15vw, 3.6rem); margin-bottom: .2em; }
+  .lede { font-size: 1.05rem; margin-bottom: 0; }
+  .hero-actions { margin-top: 14px; }
   .plate { padding: 14px 10px; margin-left: -6px; margin-right: -6px; }
   .hit-sub { display: none; }
   .chip-hit[aria-pressed="true"]::after { content: none; }

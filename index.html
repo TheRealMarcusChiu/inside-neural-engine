@@ -41,10 +41,8 @@
 <section id="overview" class="hero" aria-labelledby="overview-title">
   <div class="hero-copy">
     <h1 id="overview-title">Inside the Neural Engine</h1>
-    <p class="lede">Apple silicon puts several kinds of processor beside one shared pool of memory. This exhibit shows what the Apple Neural Engine (ANE) is for, how a tiny neural network turns pixels into scores, and why software, not the chip alone, decides where that math runs.</p>
-    <p class="hero-note">The ANE is specialized hardware for machine-learning inference. It is not another name for the CPU or GPU, and both of those can run neural networks too.</p>
-    <p class="hero-actions"><a id="explore" class="button-link" href="#processors">Explore the processors</a></p>
-    <p class="cite">Source: <a href="https://machinelearning.apple.com/research/neural-engine-transformers">Apple Machine Learning Research, Deploying Transformers on the Apple Neural Engine</a></p>
+    <p class="lede">How Apple silicon's CPU, GPU and Neural Engine share the work of running machine-learning models. Select a part of the chip to begin.</p>
+    <p class="hero-actions"><a id="explore" class="button-link" href="#processors">Explore how it works</a></p>
   </div>
 
   <figure class="chip" data-selected="ane" aria-labelledby="chip-caption">
@@ -154,6 +152,13 @@
       <p>Specialized hardware for running trained neural networks. Core ML can place supported operations here when the model and the app's allowed compute units permit it.</p>
     </div>
   </figure>
+
+  <details class="hero-more">
+    <summary>What the Neural Engine is, and isn't</summary>
+    <p>Apple silicon puts several kinds of processor beside one shared pool of memory. This exhibit shows what the Apple Neural Engine (ANE) is for, how a tiny neural network turns pixels into scores, and why software, not the chip alone, decides where that math runs.</p>
+    <p class="hero-note">The ANE is specialized hardware for machine-learning inference. It is not another name for the CPU or GPU, and both of those can run neural networks too.</p>
+    <p class="cite">Source: <a href="https://machinelearning.apple.com/research/neural-engine-transformers">Apple Machine Learning Research, Deploying Transformers on the Apple Neural Engine</a></p>
+  </details>
 </section>
 
 <!-- 2 · Processors ------------------------------------------------------- -->
@@ -176,7 +181,7 @@
 
   <figure class="plate lanes" data-workload="image">
     <svg viewBox="0 0 640 450" role="img" aria-labelledby="lanes-title">
-      <title id="lanes-title">Three lanes: the CPU runs a few varied jobs in turn, the GPU runs the same operation across a batch in lockstep, and the Neural Engine streams data through a pipeline of supported layers</title>
+      <title id="lanes-title">Three lanes: the CPU runs a few varied jobs in turn, the GPU runs the same operation across a batch in parallel, and the Neural Engine streams data through a pipeline of supported layers</title>
       <!-- CPU -->
       <g class="lane lane-cpu" transform="translate(0 4)">
         <text class="lane-name" x="0" y="28">CPU</text>
@@ -211,7 +216,7 @@
         <g class="ane-tokens"><circle cx="0" cy="136" r="6"/><circle cx="0" cy="136" r="6"/><circle cx="0" cy="136" r="6"/></g>
       </g>
     </svg>
-    <figcaption>Shapes show the style of work, not core counts, lane counts or speed.</figcaption>
+    <figcaption>Shapes show each unit's typical emphasis, not core counts, lane counts or speed. CPUs also do parallel vector math, and GPU work isn't one global lockstep.</figcaption>
   </figure>
 </section>
 
@@ -364,7 +369,7 @@
       </select>
     </div>
     <div id="coreml-detail" class="detail" aria-live="polite">
-      <p>Every operation is supported, and <code>.all</code> lets Core ML choose among the CPU, the GPU and the Neural Engine.</p>
+      <p>Every layer uses widely supported operations. .all allows every available unit, and the system picks the best one, which can include the Neural Engine. In this toy example, the layers go to the Neural Engine. It is one possible path, not the runtime's plan: real placement depends on the model, OS and hardware.</p>
     </div>
     <p class="caveat">Illustrative execution paths—not live telemetry or a prediction of Core ML scheduling</p>
     <p class="cite">Sources: <a href="https://developer.apple.com/documentation/coreml">Core ML</a>, <a href="https://developer.apple.com/documentation/coreml/mlcomputeunits">MLComputeUnits</a>, <a href="https://apple.github.io/coremltools/docs-guides/source/model-prediction.html">Core ML Tools: model prediction</a></p>
@@ -372,11 +377,19 @@
 
   <figure class="plate routes" data-units="all" data-scenario="compatible">
     <svg viewBox="0 0 640 400" role="img" aria-labelledby="routes-title">
-      <title id="routes-title">A Core ML model passes through a compute-units filter. Routes to processors outside the allowed set are cut.</title>
+      <title id="routes-title">An application submits a model to Core ML. A compute-units filter permits some processors; one possible example shows layer packets travelling to permitted processors only.</title>
+      <g class="app-node">
+        <rect x="24" y="14" width="150" height="58" rx="4"/>
+        <text class="node-name" x="40" y="40">Application</text>
+        <text class="node-sub" x="40" y="60">submits a model</text>
+        <path d="M99 72V108" marker-end="url(#route-arrow)"/>
+      </g>
+      <defs><marker id="route-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#c9ced6"/></marker></defs>
       <g class="model-node">
-        <rect x="24" y="110" width="150" height="180" rx="4"/>
-        <text class="node-name" x="40" y="140">Core ML model</text>
-        <g class="layers" transform="translate(40 158)">
+        <rect x="24" y="110" width="150" height="190" rx="4"/>
+        <text class="node-name" x="40" y="138">Core ML</text>
+        <text class="node-sub" x="40" y="158">model layers</text>
+        <g class="layers" transform="translate(40 170)">
           <rect class="layer" data-layer="0" x="0" y="0" width="118" height="22"/>
           <rect class="layer" data-layer="1" x="0" y="30" width="118" height="22"/>
           <rect class="layer" data-layer="2" x="0" y="60" width="118" height="22"/>
@@ -391,21 +404,30 @@
         <text class="gate-label" x="263" y="290">units</text>
       </g>
       <g class="route-set" fill="none">
-        <path class="route" data-route="cpu" d="M290 200C350 200 360 70 430 70"/>
-        <path class="route" data-route="gpu" d="M290 200H430"/>
-        <path class="route" data-route="ane" d="M290 200C350 200 360 330 430 330"/>
+        <path class="route is-active" data-route="cpu" d="M290 200C350 200 360 70 430 70"/>
+        <path class="route is-active" data-route="gpu" d="M290 200H430"/>
+        <path class="route is-active is-example" data-route="ane" d="M290 200C350 200 360 330 430 330"/>
       </g>
+      <g class="packets" data-packets="cpu" transform="translate(330 46)"></g>
+      <g class="packets" data-packets="gpu" transform="translate(330 176)"></g>
+      <g class="packets has-packets" data-packets="ane" transform="translate(330 342)"><path class="ex-track" d="M0 6H94"/><rect class="pkt pkt-supported" width="12" height="12" style="--i:0"/><rect class="pkt pkt-supported" width="12" height="12" style="--i:1"/></g>
       <g class="unit" data-unit="cpu" transform="translate(430 34)">
-        <rect width="200" height="72" rx="4"/><text class="node-name" x="16" y="30">CPU</text><text class="unit-state" x="16" y="54">Allowed, any layer</text>
+        <rect width="200" height="72" rx="4"/><text class="node-name" x="16" y="30">CPU</text><text class="unit-state" x="16" y="54">Allowed, not in example</text>
       </g>
       <g class="unit" data-unit="gpu" transform="translate(430 164)">
-        <rect width="200" height="72" rx="4"/><text class="node-name" x="16" y="30">GPU</text><text class="unit-state" x="16" y="54">Allowed, any layer</text>
+        <rect width="200" height="72" rx="4"/><text class="node-name" x="16" y="30">GPU</text><text class="unit-state" x="16" y="54">Allowed, not in example</text>
       </g>
       <g class="unit" data-unit="ane" transform="translate(430 294)">
-        <rect width="200" height="72" rx="4"/><text class="node-name" x="16" y="30">Neural Engine</text><text class="unit-state" x="16" y="54">Allowed, any layer</text>
+        <rect width="200" height="72" rx="4"/><text class="node-name" x="16" y="30">Neural Engine</text><text class="unit-state" x="16" y="54">Allowed, example shown</text>
       </g>
     </svg>
-    <figcaption><span class="key key-solid"></span> Solid layers: supported broadly. <span class="key key-hollow"></span> Hollow, dashed layers: need a CPU or GPU path. Dashed, crossed routes are not allowed.</figcaption>
+    <figcaption class="legend routes-legend">
+      <span><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2" width="12" height="12" class="pkt pkt-supported"/></svg>Supported layer (assumed for this toy)</span>
+      <span><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="2.5" y="2.5" width="11" height="11" class="pkt pkt-unsupported"/></svg>Unsupported layer</span>
+      <span><svg viewBox="0 0 28 16" aria-hidden="true"><path d="M2 8H26" class="key-line key-example"/></svg>One possible example, not the runtime's plan</span>
+      <span><svg viewBox="0 0 28 16" aria-hidden="true"><path d="M2 8H26" class="key-line key-permitted"/></svg>Permitted route</span>
+      <span><svg viewBox="0 0 28 16" aria-hidden="true"><path d="M2 8H26" class="key-line key-blocked"/></svg>Not allowed</span>
+    </figcaption>
   </figure>
 </section>
 

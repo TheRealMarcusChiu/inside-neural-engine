@@ -1,4 +1,4 @@
-import { toyForward, evaluatePlayground, LEVELS } from './model.js';
+import { toyForward, evaluatePlayground, LEVELS, COMPUTE_UNITS, examplePackets } from './model.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -153,8 +153,10 @@ function goTo(n) {
   syncNetwork();
 }
 
-prevBtn.addEventListener('click', () => goTo(stage - 1));
-nextBtn.addEventListener('click', () => goTo(stage + 1));
+// A manual step takes control: autoplay stops, so a later global resume can't restart it.
+const step = (d) => { playing = false; hint.textContent = ''; goTo(stage + d); };
+prevBtn.addEventListener('click', () => step(-1));
+nextBtn.addEventListener('click', () => step(1));
 speedSel.addEventListener('change', syncNetwork);
 narrow.addEventListener('change', renderNetwork);
 playBtn.addEventListener('click', () => {
@@ -211,7 +213,6 @@ $$('[data-w]', mathPanel).forEach((el) => { const [i, j] = el.dataset.w.split('-
 selectCell(0, 0);
 
 /* Core ML ------------------------------------------------------------- */
-const MASKS = { all: ['cpu', 'gpu', 'ane'], cpuOnly: ['cpu'], cpuAndGPU: ['cpu', 'gpu'], cpuAndNeuralEngine: ['cpu', 'ane'] };
 const SCENARIO_TEXT = {
   compatible: 'Every layer uses widely supported operations.',
   mixed: 'Some layers (hollow, dashed) use operations the Neural Engine can\'t run.',
@@ -226,34 +227,53 @@ const UNIT_TEXT = {
 const scenarioSel = $('#coreml-scenario');
 const unitsSel = $('#compute-units');
 const routesFig = $('.routes');
+const NAMES = { cpu: 'CPU', gpu: 'GPU', ane: 'Neural Engine' };
+const svgEl = (name, attrs) => {
+  const el = document.createElementNS('http://www.w3.org/2000/svg', name);
+  Object.entries(attrs).forEach(([k, v]) => el.setAttribute(k, v));
+  return el;
+};
 function renderCoreML() {
   const s = scenarioSel.value;
   const u = unitsSel.value;
-  const allowed = MASKS[u];
+  const allowed = COMPUTE_UNITS[u];
+  const packets = examplePackets(s, u);
   routesFig.dataset.scenario = s;
   routesFig.dataset.units = u;
   ['cpu', 'gpu', 'ane'].forEach((id) => {
     const ok = allowed.includes(id);
-    $(`[data-route="${id}"]`, routesFig).classList.toggle('is-blocked', !ok);
-    $(`[data-route="${id}"]`, routesFig).classList.toggle('is-active', ok);
+    const used = packets[id].length > 0;
+    const route = $(`[data-route="${id}"]`, routesFig);
+    route.classList.toggle('is-blocked', !ok);
+    route.classList.toggle('is-active', ok);
+    route.classList.toggle('is-example', used);
     const node = $(`[data-unit="${id}"]`, routesFig);
     node.classList.toggle('is-blocked', !ok);
-    $('.unit-state', node).textContent = !ok ? 'Not allowed'
-      : s === 'mixed' && id === 'ane' ? 'Allowed, supported layers' : 'Allowed, any layer';
+    $('.unit-state', node).textContent = !ok ? 'Not allowed' : used ? 'Allowed, example shown' : 'Allowed, not in example';
+    const g = $(`[data-packets="${id}"]`, routesFig);
+    g.classList.toggle('has-packets', used);
+    g.replaceChildren(
+      ...(used ? [svgEl('path', { class: 'ex-track', d: 'M0 6H94' })] : []),
+      ...packets[id].map((kind, i) => svgEl('rect', { class: `pkt pkt-${kind}`, width: 12, height: 12, style: `--i:${i};--n:${packets[id].length}` })),
+    );
   });
-  const parts = [SCENARIO_TEXT[s], UNIT_TEXT[u]];
-  if (s === 'mixed') {
-    if (allowed.includes('ane')) parts.push('Supported layers may run on the Neural Engine; the rest need an allowed CPU or GPU path.');
-    parts.push('Permission doesn\'t make an operation compatible: a model with operations no allowed unit supports may need conversion or adaptation, or may fail.');
-  }
+  const where = (kind) => ['cpu', 'gpu', 'ane'].filter((id) => packets[id].includes(kind)).map((id) => NAMES[id]).join(' and ');
+  const parts = [SCENARIO_TEXT[s], UNIT_TEXT[u], s === 'mixed'
+    ? `In this toy example, supported layers go to the ${where('supported')} and unsupported layers to the ${where('unsupported')}.`
+    : `In this toy example, the layers go to the ${where('supported')}.`];
+  if (s === 'mixed') parts.push('Permission doesn\'t make an operation compatible: a model with operations no allowed unit supports may need conversion or adaptation, or may fail.');
   if (s === 'restricted') {
     parts.push('The setting is a filter, not a placement order: the system still chooses within what is left.');
     if (u === 'all') parts.push('Pick a narrower setting to see the filter cut routes.');
   }
-  if (s === 'compatible') parts.push('Which allowed unit actually runs each layer is decided at run time and depends on the model, OS and hardware.');
+  parts.push('It is one possible path, not the runtime\'s plan: real placement depends on the model, OS and hardware.');
   $('#coreml-detail').replaceChildren(Object.assign(document.createElement('p'), { textContent: parts.join(' ') }));
 }
-scenarioSel.addEventListener('change', renderCoreML);
+scenarioSel.addEventListener('change', () => {
+  // Entering the restricted example from .all shows a working filter; .all can still be picked afterwards.
+  if (scenarioSel.value === 'restricted' && unitsSel.value === 'all') unitsSel.value = 'cpuAndGPU';
+  renderCoreML();
+});
 unitsSel.addEventListener('change', renderCoreML);
 
 /* Memory -------------------------------------------------------------- */
@@ -330,7 +350,10 @@ const spy = new IntersectionObserver((entries) => entries.forEach((e) => {
   if (e.isIntersecting) navLinks.forEach((a) => a.setAttribute('aria-current', String(a.hash === `#${e.target.id}`)));
 }), { rootMargin: '-45% 0px -50% 0px' });
 $$('main > section').forEach((s) => { io.observe(s); spy.observe(s); });
-document.addEventListener('visibilitychange', syncNetwork);
+// Hidden tabs freeze CSS motion without touching the user's global pause choice.
+const onVisibility = () => { root.dataset.pageHidden = String(document.hidden); syncNetwork(); };
+document.addEventListener('visibilitychange', onVisibility);
+onVisibility();
 
 /* Initial state ------------------------------------------------------- */
 renderNetwork();

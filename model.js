@@ -42,6 +42,30 @@ export function toyForward() {
   };
 }
 
+// Core ML compute units are a permission mask, per Apple's MLComputeUnits docs.
+export const COMPUTE_UNITS = {
+  all: ['cpu', 'gpu', 'ane'],
+  cpuOnly: ['cpu'],
+  cpuAndGPU: ['cpu', 'gpu'],
+  cpuAndNeuralEngine: ['cpu', 'ane'],
+};
+
+// One possible toy example of where layer packets could go. Not Core ML's scheduler:
+// the mask is authoritative, and which layers are "supported" is assumed for this toy.
+export function examplePackets(scenario, units) {
+  const allowed = COMPUTE_UNITS[units];
+  if (!allowed) throw new Error(`unknown compute units: ${units}`);
+  const out = { cpu: [], gpu: [], ane: [] };
+  const supportedTo = ['ane', 'gpu', 'cpu'].find((u) => allowed.includes(u));
+  out[supportedTo].push('supported', 'supported');
+  if (scenario === 'mixed') {
+    // Unsupported layers never go to the Neural Engine.
+    const otherTo = allowed.includes('gpu') && supportedTo !== 'gpu' ? 'gpu' : 'cpu';
+    out[otherTo].push('unsupported', 'unsupported');
+  }
+  return out;
+}
+
 // Qualitative playground. Slider levels are unitless inputs; outputs are words, never measurements.
 export const LEVELS = ['Low', 'Moderate', 'High', 'Very high'];
 const level = (n) => LEVELS[Math.min(3, Math.floor(Math.max(0, Math.min(1, n)) * 4))];

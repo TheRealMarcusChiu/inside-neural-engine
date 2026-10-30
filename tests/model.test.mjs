@@ -1,6 +1,22 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { matmul, toyForward, evaluatePlayground, LEVELS } from '../model.js';
+import { matmul, toyForward, evaluatePlayground, LEVELS, examplePackets, COMPUTE_UNITS } from '../model.js';
+
+test('example packets never leave the allowed compute-unit mask', () => {
+  for (const s of ['compatible', 'mixed', 'restricted']) {
+    for (const [u, allowed] of Object.entries(COMPUTE_UNITS)) {
+      const p = examplePackets(s, u);
+      for (const unit of ['cpu', 'gpu', 'ane']) if (!allowed.includes(unit)) assert.deepEqual(p[unit], [], `${s}/${u}/${unit}`);
+      assert.ok(!p.ane.includes('unsupported'), 'unsupported layers never go to the ANE');
+      assert.equal(Object.values(p).flat().includes('unsupported'), s === 'mixed');
+    }
+  }
+  assert.deepEqual(examplePackets('mixed', 'all'), { cpu: [], gpu: ['unsupported', 'unsupported'], ane: ['supported', 'supported'] });
+  assert.deepEqual(examplePackets('mixed', 'cpuAndNeuralEngine'), { cpu: ['unsupported', 'unsupported'], gpu: [], ane: ['supported', 'supported'] });
+  assert.deepEqual(examplePackets('mixed', 'cpuAndGPU'), { cpu: ['unsupported', 'unsupported'], gpu: ['supported', 'supported'], ane: [] });
+  assert.deepEqual(examplePackets('compatible', 'cpuOnly'), { cpu: ['supported', 'supported'], gpu: [], ane: [] });
+  assert.throws(() => examplePackets('compatible', 'aneOnly'));
+});
 
 const close = (a, b, eps = 1e-12) => assert.ok(Math.abs(a - b) < eps, `${a} ≉ ${b}`);
 const closeAll = (A, B) => A.flat().forEach((v, i) => close(v, B.flat()[i]));
