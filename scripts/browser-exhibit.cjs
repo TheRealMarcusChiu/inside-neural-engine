@@ -137,7 +137,7 @@ async function desktopJourney(browser) {
       assert.deepEqual(dead, [], 'in-page anchors without targets');
       const hrefs = (await page.locator('#sources a[href^="https://"]').evaluateAll((as) => as.map((a) => a.href))).join(' ');
       for (const s of ['neural-engine-transformers', 'documentation/coreml', 'mlcomputeunits', 'coremltools', 'ml-explore/mlx', 'ml-explore.github.io/mlx', 'mlx-lm', 'llama.cpp', 'developer.apple.com/metal', 'apple-unleashes-m1', 'jundot/omlx']) assert.ok(hrefs.includes(s), `#sources lacks ${s}`);
-      assert.match(norm(await page.locator('body').textContent()), /not affiliated with Apple/i);
+      assert.match(norm(await page.locator('body').textContent()), /\bnot affiliated with (or endorsed by )?Apple\b/i, 'explicit non-affiliation with Apple');
       assert.equal(await pressed(toggle), false, 'motion starts unpaused without reduced-motion');
     });
 
@@ -234,7 +234,7 @@ async function desktopJourney(browser) {
       const m = await motionState(page);
       assert.deepEqual(m.running, [], 'CSS/WAAPI animations still running while paused');
       assert.equal(m.smil, 0, 'SVG SMIL animations not paused');
-      for (const id of ['#network', '#processors']) {
+      for (const id of ['#overview', '#network', '#processors']) {
         await page.locator(id).scrollIntoViewIfNeeded(); await scrollSettle(page); await frames(page);
         const a = await page.screenshot(); await sleep(700); await frames(page);
         assert.ok(a.equals(await page.screenshot()), `${id} still visually animating while paused`);
@@ -292,17 +292,23 @@ async function desktopJourney(browser) {
       await sec.scrollIntoViewIfNeeded();
       assert.match(norm(await sec.textContent()), dash('Illustrative execution paths - not live telemetry or a prediction of Core ML scheduling'));
       let positive = false;
+      const fails = []; // collect per case so all 3x4 combinations always run
       for (const scen of ['compatible', 'mixed', 'restricted']) {
         await page.selectOption('#coreml-scenario', scen);
         const seen = new Set();
-        for (const unit of ['all', 'cpuOnly', 'cpuAndGPU', 'cpuAndNeuralEngine']) {
+        for (const unit of ['all', 'cpuOnly', 'cpuAndGPU', 'cpuAndNeuralEngine']) try {
           await page.selectOption('#compute-units', unit);
           await sleep(400);
           const d = await text(page.locator('#coreml-detail')), id = `${scen}/${unit}`;
           seen.add(d);
           assert.match(d, /permi|allow/i, `${id} detail should frame compute units as permission`);
           assert.doesNotMatch(d.replace(/\b(not|no|never|doesn't|does not|isn't)\b[^.]{0,30}guarantee\w*/gi, ''), /\bguarantee[sd]?\b|\bwill always run\b/i, `${id} promises placement`);
-          if (unit === 'cpuAndNeuralEngine') assert.doesNotMatch(d, /\b(ANE|Neural Engine)[- ]only\b|\bonly (on )?the (ANE|Neural Engine)\b/i, 'cpuAndNeuralEngine is CPU+ANE, not ANE-only');
+          if (unit === 'cpuAndNeuralEngine') {
+            // drop explicitly negated phrasings (e.g. `It is not "Neural Engine only"`) before scanning for a positive ANE-only claim
+            const claims = d.replace(/\b(not|never|isn't|is not|no)\b[^.]{0,12}?(\b(ANE|Neural Engine)[- ]only\b["”']?|\bonly (on )?the (ANE|Neural Engine)\b)/gi, '');
+            assert.doesNotMatch(claims,/\b(ANE|Neural Engine)[- ]only\b|\bonly (on )?the (ANE|Neural Engine)\b/i, `${id}: claims ANE-only`);
+            assert.match(d, /CPU/, `${id}: should state the CPU stays allowed`);
+          }
           const r = await routeState(sec);
           if (r) {
             if (unit === 'cpuOnly') assert.ok(!r.gpu && !r.ane, `${id}: GPU/ANE route drawn active`);
@@ -310,9 +316,10 @@ async function desktopJourney(browser) {
             if (unit === 'cpuAndNeuralEngine') assert.ok(!r.gpu, `${id}: GPU route drawn active`);
             if (scen === 'compatible' && unit === 'all') positive = !!r.ane;
           } else if (unit !== 'all') assert.match(d, /\b(not|no|excluded|never|without)\b/i, `${id} should say which units are excluded`);
-        }
-        assert.equal(seen.size, 4, `${scen}: detail should change per compute-unit setting`);
+        } catch (e) { fails.push(e.message.split('\n')[0]); }
+        if (seen.size !== 4) fails.push(`${scen}: detail should change per compute-unit setting (${seen.size}/4 distinct)`);
       }
+      assert.deepEqual(fails, [], 'Core ML scenario/compute-unit failures');
       if (await sec.locator('[data-route]').count()) assert.ok(positive, '[data-route] ANE path never active even for compatible/all (route signal unreadable)');
       else notes.push('Core ML: no [data-route] elements; route checks used #coreml-detail text');
     });
@@ -350,13 +357,19 @@ async function desktopJourney(browser) {
         seen.add(d);
         const r = await routeState(sec);
         if (r) assert.equal(!!r.ane, ane, `${rt}: ANE route highlight should be ${ane}`);
+        if (rt === 'mlx') { // Qwen lives in the MLX panel: must be visible there and explicitly not claim ANE
+          const vis = norm(await sec.innerText());
+          for (const s of ['MLX-LM', 'oMLX', 'Qwen']) assert.ok(vis.includes(s), `MLX selected: visible #local-llm lacks ${s}`);
+          const qwen = vis.split(/(?<=[.!?])\s+/).filter((x) => /Qwen/.test(x));
+          assert.ok(qwen.some((x) => /\b(not|no|doesn't|does not|isn't|without|rather than)\b[^.]*\b(ANE|Neural Engine)\b/i.test(x)) || /\b(not|no|doesn't|does not|isn't|without)\b[^.]{0,60}\b(ANE|Neural Engine)\b/i.test(d), 'MLX/Qwen should explicitly say it is not ANE acceleration');
+          for (const sent of qwen.filter((x) => /ANE|Neural Engine/.test(x))) assert.match(sent, /\b(not|no|doesn't|does not|isn't|without|rather than)\b/i, `Qwen sentence implies ANE: "${sent}"`);
+        }
       }
       assert.equal(seen.size, 3);
       const all = norm(await sec.textContent());
-      for (const s of ['MLX-LM', 'oMLX', 'llama.cpp', 'Metal', 'Core ML', 'Qwen']) assert.ok(all.includes(s), `#local-llm lacks ${s}`);
+      for (const s of ['MLX', 'llama.cpp', 'Metal', 'Core ML']) assert.ok(all.includes(s), `#local-llm lacks ${s}`);
       assert.match(all, /MLX[^.]{0,80}\b(framework|software|library)\b/i);
       assert.match(all, /Metal[^.]{0,80}\bGPU\b/i);
-      for (const sent of all.split(/(?<=[.!?])\s+/).filter((x) => /Qwen/.test(x) && /ANE|Neural Engine/.test(x))) assert.match(sent, /\b(not|no|doesn't|does not|isn't|without|rather than)\b/i, `Qwen sentence implies ANE: "${sent}"`);
     });
 
     await step('playground: ranges min/max + checkbox change results, deterministic restore', async () => {
@@ -398,9 +411,9 @@ async function desktopJourney(browser) {
         const open0 = await d.evaluate((el) => el.open);
         await d.locator('summary').first().focus();
         await page.keyboard.press('Enter');
-        assert.ok(await poll(() => d.evaluate((el) => el.open !== open0), 1000), 'Enter toggles <details>');
+        assert.ok(await poll(() => d.evaluate((el, o) => el.open !== o, open0), 1000), 'Enter toggles <details>');
         await page.keyboard.press('Space');
-        assert.ok(await poll(() => d.evaluate((el) => el.open === open0), 1000), 'Space toggles <details>');
+        assert.ok(await poll(() => d.evaluate((el, o) => el.open === o, open0), 1000), 'Space toggles <details>');
       }
     });
 
@@ -445,7 +458,8 @@ async function responsive(browser, [name, width, height]) {
           const t = el.type === 'checkbox' ? el.closest('label') || el : el, r = t.getBoundingClientRect(), id = el.id || `${sel}`;
           let o = 1, hidden = false;
           for (let n = el; n; n = n.parentElement) { const cs = getComputedStyle(n); o *= +cs.opacity; hidden ||= cs.display === 'none' || cs.visibility === 'hidden'; }
-          if (hidden || o < 0.5) { out.push(`${id} not visible at rest`); continue; }
+          // natively disabled controls may be dimmed as an affordance (e.g. prev at Input), but never invisible
+          if (hidden || o < (el.disabled ? 0.25 : 0.5)) { out.push(`${id} not visible at rest`); continue; }
           if (r.width < 43.5 || r.height < 43.5) out.push(`${id} target ${Math.round(r.width)}x${Math.round(r.height)}`);
           const sec = el.closest('section') || document.body, s = sec.getBoundingClientRect();
           if (r.left < Math.max(0, s.left) - 1 || r.right > Math.min(innerWidth, s.right) + 1) out.push(`${id} outside its panel/viewport`);
