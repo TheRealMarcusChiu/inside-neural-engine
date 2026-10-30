@@ -143,7 +143,7 @@ async function desktopJourney(browser) {
 
     await step('chip: 4 components update panel, aria-pressed, dimming', async () => {
       await setGlobalPaused(page, true); // freeze pulses so opacity signatures reflect selection only
-      const sec = page.locator('#processors');
+      const sec = page.locator('#overview'); // frozen contract: chip, caption and component buttons live in the hero
       await sec.scrollIntoViewIfNeeded();
       assert.match(norm(await sec.textContent()), dash('Conceptual diagram - not a literal die layout'));
       const details = new Set(), sigs = new Set();
@@ -413,11 +413,11 @@ async function desktopJourney(browser) {
         await page.keyboard.press('Tab');
         const f = page.locator(':focus');
         if (!(await f.evaluate(ring))) noRing.push(await f.evaluate((el) => el.id || el.tagName + (el.getAttribute('href') || '')));
-        reached = await f.evaluate((el) => el.matches('#processors button[data-component]'));
+        reached = await f.evaluate((el) => el.matches('#overview button[data-component]'));
       }
       assert.ok(reached, 'Tab never reached a chip component button');
       assert.deepEqual(noRing, [], 'focused elements without visible focus indicator');
-      const chip = page.locator('#processors button[data-component]:focus');
+      const chip = page.locator('#overview button[data-component]:focus');
       const was = await pressed(chip);
       await page.keyboard.press('Space');
       assert.ok(await pressed(chip) || was, 'Space should select the focused chip component');
@@ -460,7 +460,7 @@ async function responsive(browser, [name, width, height]) {
     });
 
     await step(`${name}: chip choice panel by ${touch ? 'tap' : 'click'} not clipped`, async () => {
-      const btn = page.locator('#processors button[data-component="gpu"]').first();
+      const btn = page.locator('#overview button[data-component="gpu"]').first();
       await btn.scrollIntoViewIfNeeded();
       await (touch ? btn.tap() : btn.click());
       assert.ok(await pressed(btn));
