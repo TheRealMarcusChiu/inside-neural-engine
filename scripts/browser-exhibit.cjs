@@ -103,7 +103,13 @@ async function netReset(page) {
   for (let i = 0; i < 4 && (await prev.isEnabled()); i++) await prev.click();
   assert.equal(await stageOf(page), 0, 'network should clamp at Input');
 }
-async function scrollSettle(page) { let last = -1; for (let i = 0; i < 40; i++) { const y = await page.evaluate(() => scrollY); if (y === last) return; last = y; await sleep(120); } }
+// Smooth scroll may not have started on the first sample: wait two frames, then require scrollY unchanged
+// for 4 consecutive samples (~360ms quiet), bounded at ~5s.
+async function scrollSettle(page) {
+  await frames(page);
+  let last = -1, same = 0;
+  for (let i = 0; i < 42 && same < 3; i++) { const y = await page.evaluate(() => scrollY); same = y === last ? same + 1 : 0; last = y; await sleep(120); }
+}
 // Layout/animation inspection only: running CSS/WAAPI animations and unpaused SMIL roots.
 const motionState = (page) => page.evaluate(() => ({
   running: document.getAnimations().filter((a) => a.playState === 'running').map((a) => a.animationName || a.transitionProperty || 'animation').slice(0, 5),
@@ -494,6 +500,8 @@ async function responsive(browser, [name, width, height]) {
         }
         assert.ok(await link.isVisible(), `nav link to #${id} unreachable`);
         await (touch ? link.tap() : link.click());
+        // wait (bounded) for the destination heading to arrive in the viewport; the exact header-clearance assert follows
+        await poll(() => page.evaluate((sid) => { const s = document.getElementById(sid), t = (s.querySelector('h1,h2') || s).getBoundingClientRect().top; return t >= 0 && t < innerHeight; }, id), 3000);
         await scrollSettle(page);
         const g = await page.evaluate((sid) => {
           const sec = document.getElementById(sid), r = (sec.querySelector('h1,h2') || sec).getBoundingClientRect();
